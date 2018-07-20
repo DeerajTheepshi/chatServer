@@ -2,6 +2,7 @@ import socket
 import select
 import sys
 from thread import *
+import hashlib
  
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
  
@@ -17,27 +18,48 @@ userIP = ""
 userName = ""
 userTarget = ""
  
-def clientthread(conn, addr):
+def clientthread(conn, addr,init_mssg):
  
 
-    conn.send("Diprivi Welcomes you!")
+    conn.send("Diprivi Welcomes you!\r")
 
     init_list = init_mssg.split("$$")
+
     userIP = init_list[0]
     userName = init_list[1]
     userTarget = init_list[2]
-    clientMap[userName] = conn
+
+    if(len(init_list)==3):
+    	clientMap[userName] = conn
+
+    elif(len(init_list)==4):
+	groupName = init_list[3]
+	if groupName in groupMap :
+		groupMap[groupName].append(conn)
+	else:
+		groupMap[groupName]=[]
+		groupMap[groupName].append(conn)
  
     while True:
             try:
                 message = conn.recv(2048)
-                if message:
+                if message!="":
+ 		    if(message==(hashlib.md5("typing").hexdigest())):
+			print addr[0] + ">> " +"typing...."
+			message_to_send = addr[0] + ">> " +"typing....\r"
+			if(len(init_list)==4):
+				send_all(message_to_send,conn,groupName,0)
+			else:
+		                kaala(message_to_send, conn,userTarget)
+		    else:	
+	                    print addr[0] + ">> " + message
  
-                    print addr[0] + "> " + message
- 
-                    message_to_send =  addr[0] + ">> " + message
-
-                    kaala(message_to_send, conn,userTarget)
+        	            message_to_send =  addr[0] + ">> " + message +"\r"
+			
+			    if(len(init_list)==4):
+				send_all(message_to_send,conn,groupName,1)
+			    else:
+		                kaala(message_to_send, conn,userTarget)
  
                 else:
                     remove(conn,userTarget)
@@ -46,6 +68,7 @@ def clientthread(conn, addr):
                 continue
  
 def kaala(message, connection,target):
+    
     client = clientMap[target]
     try:
        	client.send(message)
@@ -57,6 +80,28 @@ def kaala(message, connection,target):
 def remove(connection,target):
     if connection in list_of_clients:
         del clientMap[target]
+
+def send_all(message,conn,groupName,option):
+     target_ips = groupMap[groupName]
+     print(option)
+     for ips in target_ips:
+	if(option==0):
+		if(ips!=conn):
+			try:
+				ips.send(message)
+        		except:
+                		ips.close()
+	elif(option==1):
+		try:
+			ips.send(message)
+        	except:
+               		ips.close()
+ 
+                	remove_from_group(ips,target_ips)
+
+def remove_from_group(connection,group):
+    if connection in group:
+        group.remove(connection)
  
 while True:
  
@@ -66,7 +111,7 @@ while True:
 
     init_mssg = conn.recv(1024)
  
-    start_new_thread(clientthread,(conn,addr))    
+    start_new_thread(clientthread,(conn,addr,init_mssg))    
  
 conn.close()
 server.close()
